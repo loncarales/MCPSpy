@@ -1,0 +1,6 @@
+venv
+.venv
+__pycache__
+mcpspy
+pkg/ebpf/mcpspy_bpfel_*
+.vscode
