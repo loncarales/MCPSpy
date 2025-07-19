@@ -149,6 +149,14 @@ class MCPSpyE2ETest:
             r"root\[\d+\]\['stdio_transport'\]\['to_pid'\]",
         ]
 
+        # Ignoring version fields.
+        # This is temporary until we'll be able to provide
+        # a version field in the MCP server.
+        exclude_regex_paths.append(
+            r"root\[\d+\]\['result'\]\['serverInfo'\]\['version'\]"
+        )
+        exclude_regex_paths.append(r"root\[\d+\]\['raw'\]")
+
         diff = DeepDiff(
             expected_patterns,
             captured_messages,
