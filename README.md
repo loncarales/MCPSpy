@@ -197,14 +197,6 @@ The test suite includes:
 - **Platform**: Linux only (kernel 5.10+).
 - **Transport**: Currently supports stdio transport only. Support for streamable HTTP and SSE transports is planned.
 
-## Roadmap
-
-- [ ] Support for streamable HTTP and SSE transports.
-- [ ] Response validation with request correlation.
-- [ ] Extended message data extraction (MCP payloads).
-- [ ] Add e2e tests for additional MCP methods.
-- [ ] Release flow for multiple platforms. (e.g., arm64, etc.)
-
 ## Contributing
 
 We welcome contributions! Feel free to open an issue or a pull request.
