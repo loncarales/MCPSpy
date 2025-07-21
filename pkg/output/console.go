@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -138,13 +139,37 @@ func (d *ConsoleDisplay) printMessage(msg *mcp.Message) {
 	}
 }
 
-// printBuffer prints the raw message content
+// printBuffer prints the raw message content with proper JSON formatting
 func (d *ConsoleDisplay) printBuffer(content string) {
-	lines := strings.Split(content, "\n")
+	// Try to parse and pretty-print JSON
+	var prettyContent string
+	var jsonObj interface{}
+
+	if err := json.Unmarshal([]byte(content), &jsonObj); err == nil {
+		// Valid JSON - pretty print it
+		if prettyBytes, err := json.MarshalIndent(jsonObj, "", "  "); err == nil {
+			prettyContent = string(prettyBytes)
+		} else {
+			prettyContent = content
+		}
+	} else {
+		// Not valid JSON - use as-is
+		prettyContent = content
+	}
+
+	// Split into lines and print with consistent formatting
+	lines := strings.Split(prettyContent, "\n")
+
+	// Print top border
+	fmt.Fprintln(d.writer, "┌────")
+
+	// Print content lines
 	for _, line := range lines {
 		if line != "" {
-			fmt.Fprintf(d.writer, "    │ %s\n", line)
+			fmt.Fprintf(d.writer, "│ %s\n", line)
 		}
 	}
-	fmt.Fprintln(d.writer, "    └────")
+
+	// Print bottom border
+	fmt.Fprintln(d.writer, "└────")
 }
