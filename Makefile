@@ -90,21 +90,6 @@ image: ## Build Docker image for current platform
 	fi;
 	@echo "Docker image built: $(DOCKER_IMAGE):$(IMAGE_TAG)"
 
-.PHONY: image-all
-image-all: ## Build multi-platform Docker image (requires buildx)
-	@echo "Building multi-platform Docker image for local loading..."
-	@if ! docker buildx version >/dev/null 2>&1; then \
-    	echo "Docker Buildx not found. Install with: docker buildx install"; \
-    	exit 1; \
-	fi
-	@$(DOCKER) buildx create --use --name multiarch-builder 2>/dev/null || $(DOCKER) buildx use multiarch-builder
-	@for platform in linux/amd64 linux/arm64; do \
-    	tag_suffix=$$(echo $$platform | cut -d'/' -f2); \
-    	echo "Building and loading $$platform..."; \
-    	$(DOCKER) buildx build --load --platform=$$platform -t $(DOCKER_IMAGE):$(IMAGE_TAG)-$$tag_suffix -f deploy/docker/Dockerfile .; \
-	done
-	@echo "Individual platform Docker images built and loaded locally."
-
 # Clean test environment
 .PHONY: test-e2e-clean
 test-e2e-clean: ## Clean Python e2e test environment
