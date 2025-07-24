@@ -38,11 +38,8 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Generate eBPF bindings
-        run: make generate
-
-      - name: Build
-        run: make build
+      - name: Build release artifacts with checksums
+        run: make build-release
 
       - name: Run unit tests
         run: make test
@@ -50,11 +47,15 @@ jobs:
       - name: Run end-to-end tests
         run: make test-e2e
 
-      - name: Upload artifact
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: mcpspy-binary
-          path: mcpspy
+          name: mcpspy-binaries
+          path: |
+            build/mcpspy-linux-amd64
+            build/mcpspy-linux-arm64
+            build/checksums.txt
+          retention-days: 30
 
   docker:
     needs: [build]
@@ -73,15 +74,17 @@ jobs:
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (multi-platform)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./deploy/docker/Dockerfile
+          # Use multiple platforms. Buildx will handle the cross-compilation.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest
 
@@ -111,18 +114,19 @@ jobs:
         with:
           context: .
           file: ./deploy/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64 # Ensure release image is also multi-platform
           push: true
           tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}
 
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: mcpspy-binary
+          name: mcpspy-binaries # Name matches the upload from the 'build' job
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: mcpspy
+          files: mcpspy-binaries/*
           draft: false
           prerelease: false
         env:

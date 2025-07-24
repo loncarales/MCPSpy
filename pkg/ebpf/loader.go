@@ -17,11 +17,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -cc clang -cflags "-D__TARGET_ARCH_x86" mcpspy ../../bpf/mcpspy.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -cc clang -cflags "-D__TARGET_ARCH_x86" mcpspy_bpfel_x86 ../../bpf/mcpspy.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target arm64 -cc clang -cflags "-D__TARGET_ARCH_arm64" mcpspy_bpfel_arm64 ../../bpf/mcpspy.c
 
 // Loader manages eBPF program lifecycle
 type Loader struct {
-	objs    *mcpspyObjects
+	objs    *archObjects
 	links   []link.Link
 	reader  *ringbuf.Reader
 	eventCh chan Event
@@ -44,8 +45,8 @@ func New(debug bool) (*Loader, error) {
 // Load attaches eBPF programs to kernel
 func (l *Loader) Load() error {
 	// Load pre-compiled eBPF objects
-	objs := &mcpspyObjects{}
-	if err := loadMcpspyObjects(objs, nil); err != nil {
+	objs := &archObjects{}
+	if err := loadArchObjects(objs, nil); err != nil {
 		var verifierError *ebpf.VerifierError
 		if errors.As(err, &verifierError) && logrus.IsLevelEnabled(logrus.DebugLevel) {
 			fmt.Fprintln(os.Stderr, strings.Join(verifierError.Log, "\n"))
