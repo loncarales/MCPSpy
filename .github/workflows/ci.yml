@@ -61,48 +61,76 @@ jobs:
       - name: Run end-to-end tests
         # Requires root/privileged access due to eBPF.
         run: sudo -E make test-e2e
-#   build:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
-#
-#       - name: Set up Go
-#         uses: actions/setup-go@v5
-#         with:
-#           go-version: "1.24"
-#
-#       - name: Install dependencies
-#         run: |
-#           sudo apt-get update
-#           sudo apt-get install -y clang llvm make libbpf-dev
-#
-#       - name: Install Go tools
-#         run: |
-#           go install github.com/cilium/ebpf/cmd/bpf2go@latest
-#
-#       - name: Download dependencies
-#         run: go mod download
-#
-#       - name: Build release artifacts with checksums
-#         run: make build-release
-#
-#       - name: Run unit tests
-#         run: make test
-#
-#       - name: Run end-to-end tests
-#         run: make test-e2e
-#
-#       - name: Upload binaries
-#         uses: actions/upload-artifact@v4
-#         with:
-#           name: mcpspy-binaries
-#           path: |
-#             build/mcpspy-linux-amd64
-#             build/mcpspy-linux-arm64
-#             build/checksums.txt
-#           retention-days: 30
-#
+
+# Job to build cross-platform binaries as release assets
+  build_binaries:
+    needs: [test]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+         # For Linux multi-arch, QEMU and cross-compilers are typically used, but `go build` itself
+        # combined with the correct `libbpf-dev` install and `CGO_ENABLED=1` often handles it.
+        # We'll use a single ubuntu-latest runner for simplicity and rely on Go's cross-compilation for CGO.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install build dependencies for CGO (on ${{ matrix.goarch }} target)
+        run: |
+          sudo apt-get update
+          # For now, let's try the simpler approach, relying on Go's CGO cross-compilation capabilities
+          # and assuming `libbpf` headers are generic enough or implicitly handled.
+          sudo apt-get install -y clang llvm make libbpf-dev build-essential
+
+      - name: Install Go tools
+        run: |
+          go install github.com/cilium/ebpf/cmd/bpf2go@latest
+
+      - name: Download dependencies
+        run: go mod download
+      - name: Generate eBPF Go bindings
+        # This step uses `bpf2go`. `bpf2go` generates Go source files from C BPF.
+        # It needs `clang` and `llvm` which were installed above.
+        # This output should be compatible with the target architecture binary.
+        run: make generate
+
+      - name: Build binary for ${{ matrix.goos }}-${{ matrix.goarch }}
+        # CGO_ENABLED MUST BE 1 for eBPF programs!
+        # This will use the CGO toolchain on the `ubuntu-latest` runner to build for the target architecture.
+        run: |
+          mkdir -p build
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=1 go build \
+            -ldflags "-X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') \
+                      -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') \
+                      -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            -trimpath \
+            -o build/mcpspy-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/mcpspy
+
+      - name: Create checksum
+        run: |
+          cd build
+          sha256sum mcpspy-${{ matrix.goos }}-${{ matrix.goarch }} > mcpspy-${{ matrix.goos }}-${{ matrix.goarch }}.sha256sum
+      - name: Run unit tests
+        run: make test
+
+      - name: Upload ${{ matrix.goos }}-${{ matrix.goarch }} binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcpspy-binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            build/mcpspy-${{ matrix.goos }}-${{ matrix.goarch }}
+            build/mcpspy-${{ matrix.goos }}-${{ matrix.goarch }}.sha256sum
+          retention-days: 30
+
+# Job to build and push Docker images
 #   docker:
 #     needs: [build]
 #     runs-on: ubuntu-latest
