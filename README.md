@@ -66,7 +66,7 @@ First, install the required system dependencies:
 ```bash
 sudo apt-get update
 # Install build essentials, eBPF dependencies
-sudo apt-get install -y clang llvm make libbpf-dev build-essential
+sudo apt-get install -y clang clang-format llvm make libbpf-dev build-essential
 # Install Python 3 and pip (for e2e tests)
 sudo apt-get install -y python3 python3-pip python3-venv
 # Install docker and buildx (if not already installed)

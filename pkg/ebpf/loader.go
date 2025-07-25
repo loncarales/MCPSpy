@@ -31,7 +31,7 @@ type Loader struct {
 
 // New creates a new eBPF loader
 func New(debug bool) (*Loader, error) {
-	// Remove memory limit for eBPF
+	// Remove the memory limit for eBPF
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("failed to remove memlock: %w", err)
 	}
@@ -49,7 +49,9 @@ func (l *Loader) Load() error {
 	if err := loadArchObjects(objs, nil); err != nil {
 		var verifierError *ebpf.VerifierError
 		if errors.As(err, &verifierError) && logrus.IsLevelEnabled(logrus.DebugLevel) {
-			fmt.Fprintln(os.Stderr, strings.Join(verifierError.Log, "\n"))
+			if _, err := fmt.Fprintln(os.Stderr, strings.Join(verifierError.Log, "\n")); err != nil {
+				logrus.WithError(err).Warn("Failed to write verifier log to stderr")
+			}
 		}
 		return fmt.Errorf("failed to load eBPF objects: %w", err)
 	}
@@ -75,7 +77,7 @@ func (l *Loader) Load() error {
 	}
 	l.links = append(l.links, readExitLink)
 
-	// Open ring buffer reader
+	// Open the ring buffer reader
 	reader, err := ringbuf.NewReader(l.objs.Events)
 	if err != nil {
 		return fmt.Errorf("failed to create ring buffer reader: %w", err)
@@ -154,8 +156,8 @@ func (l *Loader) Close() error {
 	}
 
 	// Detach all links
-	for _, link := range l.links {
-		if err := link.Close(); err != nil {
+	for _, programLink := range l.links {
+		if err := programLink.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close link: %w", err))
 		}
 	}

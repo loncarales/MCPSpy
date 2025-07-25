@@ -12,6 +12,7 @@ CLANG ?= clang
 CLANG_FORMAT ?= clang-format
 DOCKER ?= docker
 PYTHON ?= python3
+GOLANGCI_LINT ?= golangci-lint
 
 # Platform detection and cross-compilation support
 GOOS ?= $(shell go env GOOS)
@@ -25,15 +26,16 @@ PLATFORMS := linux-amd64 linux-arm64
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS := -X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(VERSION) \
-		   -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(COMMIT) \
-		   -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(BUILD_DATE)
+# Note: LDFLAGS are now primarily defined directly in the CI workflow Go build commands,
+# and also used within the Dockerfile's build step.
+# For local `make build`, they are implicitly used by ./cmd/mcpspy build.
 
 # Source files
 BPF_SRCS := $(shell find ./bpf -type f \( -name '*.[ch]' ! -name 'vmlinux.h' \))
 
 # Directories
 BUILD_DIR := build
+GO_BIN_DIR := $(shell go env GOPATH)/bin
 
 # Binary naming with platform suffix
 BINARY_OUTPUT := $(BUILD_DIR)/$(BINARY_NAME)-$(PLATFORM)
@@ -42,7 +44,7 @@ BINARY_OUTPUT := $(BUILD_DIR)/$(BINARY_NAME)-$(PLATFORM)
 
 # Default target
 .PHONY: all
-all: generate build-all ## Building everything (default target)
+all: generate build ## Building everything (default target)
 
 # Generate eBPF Go bindings
 .PHONY: generate
@@ -55,40 +57,30 @@ generate: ## Generate eBPF Go bindings
 build: generate	## Build the binary for current platform
 	@echo "Building $(BINARY_NAME) for $(PLATFORM)..."
 	@mkdir -p $(BUILD_DIR)
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_FLAGS) -o $(BINARY_OUTPUT) ./cmd/mcpspy
+	# CGO_ENABLED MUST BE 1 for eBPF programs!
+	@CGO_ENABLED=1 $(GO) build \
+		-ldflags "-X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(VERSION) \
+				  -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(COMMIT) \
+				  -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(BUILD_DATE)" \
+		-trimpath \
+		-o $(BINARY_OUTPUT) \
+		./cmd/mcpspy
 	@echo "Binary built: $(BINARY_OUTPUT)"
 
-.PHONY: build-all
-build-all: generate ## Build for all supported platforms
-	@echo "Building $(BINARY_NAME) for all platforms..."
-	@mkdir -p $(BUILD_DIR)
-	@for platform in $(PLATFORMS); do \
-		os=$$(echo $$platform | cut -d'-' -f1); \
-		arch=$$(echo $$platform | cut -d'-' -f2); \
-		echo "Building for $$platform ($$os/$$arch)..."; \
-		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-$$platform ./cmd/mcpspy; \
-		echo "Built: $(BUILD_DIR)/$(BINARY_NAME)-$$platform"; \
-	done
-	@echo "All binaries built successfully!"
-
-.PHONY: build-release
-build-release: build-all ## Build release binaries and create checksums
-	@echo "Creating release artifacts..."
-	@cd $(BUILD_DIR) && sha256sum $(BINARY_NAME)-* > checksums.txt
-	@echo "Release artifacts created with checksums"
-
-# Build Docker image
+# Build Docker image for current platform (optional, CI handles multi-platform)
 .PHONY: image
-image: ## Build Docker image for current platform
+image: ## Build Docker image for current platform (local development)
 	@echo "Building Docker image for $(PLATFORM)..."
 	@if docker buildx version >/dev/null 2>&1; then \
-		echo "Using Docker Buildx for better platform support..."; \
-		$(DOCKER) buildx build --load --platform=$(GOOS)/$(GOARCH) -t $(DOCKER_IMAGE):$(IMAGE_TAG) -f deploy/docker/Dockerfile .; \
-	else \
-		echo "Using legacy Docker build (buildx not available)..."; \
-		$(DOCKER) image build --no-cache -t $(DOCKER_IMAGE):$(IMAGE_TAG) -f deploy/docker/Dockerfile .; \
-	fi;
+        echo "Using Docker Buildx for current platform..."; \
+        $(DOCKER) buildx build --load --platform=$(GOOS)/$(GOARCH) -t $(DOCKER_IMAGE):$(IMAGE_TAG) -f deploy/docker/Dockerfile .; \
+    else \
+        echo "Using legacy Docker build (buildx not available)..."; \
+        $(DOCKER) image build --no-cache -t $(DOCKER_IMAGE):$(IMAGE_TAG) -f deploy/docker/Dockerfile .; \
+    fi;
 	@echo "Docker image built: $(DOCKER_IMAGE):$(IMAGE_TAG)"
+
+##@ Test Targets
 
 # Clean test environment
 .PHONY: test-e2e-clean
@@ -111,6 +103,13 @@ deps: ## Install dependencies
 	$(GO) mod download
 	$(GO) mod tidy
 
+PHONY: go-tools
+go-tools: ## Install Go development tools (golangci-lint, bpf2go)
+	@echo "Installing Go development tools..."
+	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	$(GO) install github.com/cilium/ebpf/cmd/bpf2go@latest
+	@echo "Please ensure $(GO_BIN_DIR) is in your PATH for local development."
+
 # Format code
 .PHONY: fmt
 fmt: ## Format code
@@ -120,9 +119,9 @@ fmt: ## Format code
 
 # Run linters
 .PHONY: lint
-lint: ## Run linters
+lint: generate ## Run linters
 	@echo "Running linters..."
-	golangci-lint run --disable=errcheck
+	$(GO_BIN_DIR)/$(GOLANGCI_LINT) run --disable=errcheck
 
 # Run unit tests
 .PHONY: test
@@ -148,7 +147,8 @@ test-e2e-mcp: test-e2e-setup ## Run MCP client (without MCPSpy) with simulated t
 test-e2e: build test-e2e-setup ## Run end-to-end tests
 	@echo "Running end-to-end tests..."
 	@echo "Note: MCPSpy requires root privileges for eBPF operations"
-	sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64
+	# Ensure this points to the locally built binary
+	sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy $(BUILD_DIR)/$(BINARY_NAME)-$(PLATFORM)
 
 # Help
 PHONY: help

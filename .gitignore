@@ -1,4 +1,3 @@
-## MCPSpy - Real-time monitoring for Model Context Protocol communication using eBPF
 # Manual added .gitignore file for MCPSpy project
 
 venv
