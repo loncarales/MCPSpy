@@ -65,14 +65,18 @@ jobs:
 # Job to build cross-platform binaries as release assets
   build_binaries:
     needs: [test]
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux]
-        goarch: [amd64, arm64]
-         # For Linux multi-arch, QEMU and cross-compilers are typically used, but `go build` itself
-        # combined with the correct `libbpf-dev` install and `CGO_ENABLED=1` often handles it.
-        # We'll use a single ubuntu-latest runner for simplicity and rely on Go's cross-compilation for CGO.
+        include:
+        - os: ubuntu-24.04
+          goos: linux
+          goarch: amd64
+        - os: ubuntu-24.04-arm
+          goos: linux
+          goarch: arm64
+
+    runs-on: ${{ matrix.os }} # The runner type depends on the matrix entry
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
