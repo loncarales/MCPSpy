@@ -31,10 +31,12 @@ jobs:
       - name: Install build dependencies (for linting/testing on host)
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm make libbpf-dev build-essential golangci-lint
+          sudo apt-get install -y clang clang-format llvm make libbpf-dev build-essential
 
-      - name: Install Go tools (bpf2go)
-        run: go install github.com/cilium/ebpf/cmd/bpf2go@latest
+      - name: Install Go development tools (golangci-lint, bpf2go)
+        run: |
+          go install github.com/cilium/ebpf/cmd/bpf2go@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
       - name: Download Go modules
         run: go mod download
