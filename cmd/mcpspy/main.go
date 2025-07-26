@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/alex-ilgayev/mcpspy/pkg/ebpf"
-	"github.com/alex-ilgayev/mcpspy/pkg/encoder"
 	"github.com/alex-ilgayev/mcpspy/pkg/mcp"
 	"github.com/alex-ilgayev/mcpspy/pkg/output"
 	"github.com/alex-ilgayev/mcpspy/pkg/version"
@@ -24,6 +23,7 @@ var (
 	showBuffers bool
 	verbose     bool
 	outputFile  string
+	logLevel    string
 )
 
 func main() {
@@ -39,8 +39,9 @@ communication by tracking stdio operations and analyzing JSON-RPC 2.0 messages.`
 
 	// Add flags
 	rootCmd.Flags().BoolVarP(&showBuffers, "buffers", "b", false, "Show raw message buffers")
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging (debug level)")
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (JSONL format will be written to file)")
+	rootCmd.Flags().StringVarP(&logLevel, "log-level", "l", "info", "Set log level (trace, debug, info, warn, error, fatal, panic)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -49,13 +50,21 @@ communication by tracking stdio operations and analyzing JSON-RPC 2.0 messages.`
 
 func run(cmd *cobra.Command, args []string) error {
 	// Set up logging
+	// Handle verbose flag as shortcut for debug level
 	if verbose {
-		logrus.SetLevel(logrus.DebugLevel)
+		logLevel = "debug"
+	}
 
-		// Setup trace pipe to debug eBPF programs
+	// Parse and set log level
+	level, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		return fmt.Errorf("invalid log level '%s': %w", logLevel, err)
+	}
+	logrus.SetLevel(level)
+
+	// Setup trace pipe to debug eBPF programs if debug or trace level
+	if level >= logrus.DebugLevel {
 		go mcpspydebug.PrintTracePipe(logrus.StandardLogger())
-	} else {
-		logrus.SetLevel(logrus.InfoLevel)
 	}
 
 	// Set up console display (always show console output)
@@ -79,7 +88,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create and load eBPF program
-	loader, err := ebpf.New(verbose)
+	loader, err := ebpf.New(level >= logrus.DebugLevel)
 	if err != nil {
 		return fmt.Errorf("failed to create eBPF loader: %w", err)
 	}
@@ -126,34 +135,44 @@ func run(cmd *cobra.Command, args []string) error {
 				return nil
 			}
 
-			// Get buffer data
-			buf := event.Buf[:event.BufSize]
-			if len(buf) == 0 {
-				continue
-			}
-
-			commStr := encoder.BytesToStr(event.Comm[:])
-
-			// Parse raw eBPF event data into MCP messages
-			messages, err := parser.ParseData(buf, event.EventType, event.PID, commStr)
-			if err != nil {
-				logrus.WithError(err).Debug("Failed to parse data")
-				continue
-			}
-
-			// Update statistics
-			for _, msg := range messages {
-				if msg.Method != "" {
-					stats[msg.Method]++
+			// Handle different event types
+			switch e := event.(type) {
+			case *ebpf.DataEvent:
+				buf := e.Buf[:e.BufSize]
+				if len(buf) == 0 {
+					continue
 				}
-			}
 
-			// Display messages to console
-			consoleDisplay.PrintMessages(messages)
+				// Parse raw eBPF event data into MCP messages
+				messages, err := parser.ParseData(buf, e.EventType, e.PID, e.Comm())
+				if err != nil {
+					logrus.WithError(err).Debug("Failed to parse data")
+					continue
+				}
 
-			// Also write to file if specified
-			if fileDisplay != nil {
-				fileDisplay.PrintMessages(messages)
+				// Update statistics
+				for _, msg := range messages {
+					if msg.Method != "" {
+						stats[msg.Method]++
+					}
+				}
+
+				// Display messages to console
+				consoleDisplay.PrintMessages(messages)
+
+				// Also write to file if specified
+				if fileDisplay != nil {
+					fileDisplay.PrintMessages(messages)
+				}
+			case *ebpf.LibraryEvent:
+				// Handle library events - for now just log them
+				logrus.WithFields(logrus.Fields{
+					"pid":  e.PID,
+					"comm": e.Comm(),
+					"path": e.Path(),
+				}).Trace("Library loaded")
+			default:
+				logrus.WithField("type", event.Type()).Warn("Unknown event type")
 			}
 		}
 	}
