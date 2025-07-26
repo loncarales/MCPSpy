@@ -182,7 +182,13 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      # Temp fix for https://github.com/docker/build-push-action/issues/252
+      - name: Move cache to final location
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
  # Job to create a GitHub Release and attach both binaries and the Docker image
   release:
