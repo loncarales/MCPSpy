@@ -68,7 +68,7 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Install build dependencies for CGO (on ${{ matrix.goarch }} target)
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm make libbpf-dev build-essential
@@ -140,20 +140,23 @@ jobs:
           echo "ARCH_SPECIFIC_TAG=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_TAG_WITH_SUFFIX }}" >> $GITHUB_ENV
           echo "Architecture specific tag: ${{ env.ARCH_SPECIFIC_TAG }}"
 
-      - name: Download ${{ matrix.goos }}-${{ matrix.arch }} binary
+      - name: Download binary and checksum [${{ matrix.arch }}]
         # Download the binaries needed for this iteration's Docker build
         uses: actions/download-artifact@v4
         with:
           name: mcpspy-binaries
-          path: . # Download to the root of the workspace, so Dockerfile can find 'mcpspy'
+          path: artifacts # Download all to a common 'artifacts' directory
+
+        - name: List downloaded files (for debug)
+          run: ls -lR artifacts/ # Will show artifacts/mcpspy-binaries/mcpspy-linux-amd64, etc.
 
       - name: Move binary to expected name for Dockerfile
         # The downloaded artifact will be in a subfolder (e.g., `./mcpspy-binaries/mcpspy-linux-amd64`).
         # The Dockerfile expects `COPY mcpspy`. So we need to move/rename it.
         run: |
           # Check checksum
-          sha256sum -c mcpspy-binaries/mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
-          mv mcpspy-binaries/mcpspy-linux-${{ matrix.arch }} ./mcpspy
+          sha256sum -c artifacts/mcpspy-binaries/mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
+          mv artifacts/mcpspy-binaries/mcpspy-linux-${{ matrix.arch }} ./mcpspy
 
       - name: Build and push Docker image (multi-platform)
         uses: docker/build-push-action@v5
