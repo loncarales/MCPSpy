@@ -1,47 +1,16 @@
-# Build stage
-FROM golang:1.24-alpine AS builder
+# We no longer need a 'builder' stage for compilation.
+# We will receive the pre-built binary as part of the build context.
 
-# Install build dependencies for CGO/eBPF
-RUN apk add --no-cache \
-    clang \
-    llvm \
-    make \
-    libbpf-dev \
-    build-base
-
-WORKDIR /build
-
-# Copy source code
-COPY . .
-
-# Install Go tools (bpf2go)
-RUN go install github.com/cilium/ebpf/cmd/bpf2go@latest
-
-# New: Conditional CGO flags based on TARGETARCH
-# This is the fix for the '-m64' error on ARM64
-RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-        echo "Setting CGO_CFLAGS for ARM64 (removing -m64 if present)"; \
-        # Explicitly set CGO_CFLAGS to empty or safe flags for ARM64
-        # -m64 is specifically for x86_64, not arm64. Overriding to nothing for ARM64.
-        export CGO_CFLAGS=""; \
-        export CGO_LDFLAGS=""; \
-    fi; \
-    # Build the binary for the target platform
-    echo "Building for TARGETOS=$TARGETOS TARGETARCH=$TARGETARCH" && \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=1 make generate && \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=1 go build \
-        -ldflags "-X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') \
-                  -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') \
-                  -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-        -trimpath \
-        -o mcpspy \
-        ./cmd/mcpspy
-
-# Runtime stage
+# IMPORTANT: The base image needs to match the target architecture that Buildx is building for.
+# Buildx handles this automatically with `FROM alpine:latest`.
 FROM alpine:latest
 
-# Copy the binary from builder stage
-COPY --from=builder /build/mcpspy /app/mcpspy
+# Copy the pre-built binary that will be passed into the build context.
+# We'll expect the binary to be at the root of the build context (which we'll achieve with the CI action).
+# The name of the binary will be `mcpspy` inside the image.
+COPY mcpspy /app/mcpspy
+# Make the binary executable
+RUN chmod +x /app/mcpspy
 
 # Add labels for better image metadata
 LABEL org.opencontainers.image.title="MCPSpy"
