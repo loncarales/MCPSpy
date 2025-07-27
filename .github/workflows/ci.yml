@@ -140,29 +140,29 @@ jobs:
           echo "ARCH_SPECIFIC_TAG=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_TAG_WITH_SUFFIX }}" >> $GITHUB_ENV
           echo "Architecture specific tag: ${{ env.ARCH_SPECIFIC_TAG }}"
 
-       - name: Download ${{ matrix.goos }}-${{ matrix.arch }} binary
-         # Download the binaries needed for this iteration's Docker build
-         uses: actions/download-artifact@v4
-         with:
-           name: mcpspy-binaries
-           path: . # Download to the root of the workspace, so Dockerfile can find 'mcpspy'
+      - name: Download ${{ matrix.goos }}-${{ matrix.arch }} binary
+        # Download the binaries needed for this iteration's Docker build
+        uses: actions/download-artifact@v4
+        with:
+          name: mcpspy-binaries
+          path: . # Download to the root of the workspace, so Dockerfile can find 'mcpspy'
 
-        - name: Move binary to expected name for Dockerfile
-          # The downloaded artifact will be in a subfolder (e.g., `./mcpspy-binaries/mcpspy-linux-amd64`).
-          # The Dockerfile expects `COPY mcpspy`. So we need to move/rename it.
-          run: |
-            # Check checksum
-            sha256sum -c mcpspy-binaries/mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
-            mv mcpspy-binaries/mcpspy-linux-${{ matrix.arch }} ./mcpspy
+      - name: Move binary to expected name for Dockerfile
+        # The downloaded artifact will be in a subfolder (e.g., `./mcpspy-binaries/mcpspy-linux-amd64`).
+        # The Dockerfile expects `COPY mcpspy`. So we need to move/rename it.
+        run: |
+          # Check checksum
+          sha256sum -c mcpspy-binaries/mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
+          mv mcpspy-binaries/mcpspy-linux-${{ matrix.arch }} ./mcpspy
 
-        - name: Build and push Docker image (multi-platform)
-            uses: docker/build-push-action@v5
-            with:
-              context: .
-              file: ./deploy/docker/Dockerfile
-              platforms: linux/${{ matrix.arch }}
-              push: true
-              tags: ${{ env.ARCH_SPECIFIC_TAG }} # Push with the arch-specific tag
+      - name: Build and push Docker image (multi-platform)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deploy/docker/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ${{ env.ARCH_SPECIFIC_TAG }} # Push with the arch-specific tag
 
   # Job to create and push the multi-arch manifest list
   create_and_push_manifest:
