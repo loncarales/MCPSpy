@@ -143,7 +143,6 @@ jobs:
           ARCH_SPECIFIC_TAG="${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG_WITH_SUFFIX}"
           # Export to environment for later steps
           echo "ARCH_SPECIFIC_TAG=$ARCH_SPECIFIC_TAG" >> $GITHUB_ENV
-          echo "Architecture specific tag: $ARCH_SPECIFIC_TAG"
 
       - name: Download binary and checksum [${{ matrix.arch }}]
         # Download the binaries needed for this iteration's Docker build
@@ -151,9 +150,6 @@ jobs:
         with:
           name: mcpspy-binaries
           path: artifacts # Download all to a common 'artifacts' directory
-
-      - name: List downloaded files (for debug)
-        run: ls -lR artifacts/ # Will show artifacts/mcpspy-linux-amd64, etc.
 
       - name: Verify and move binary to expected name for Dockerfile
         # The downloaded artifact will be in a subfolder (e.g., `./artifacts/mcpspy-linux-amd64`).
@@ -201,7 +197,6 @@ jobs:
           else
             echo "MAIN_IMAGE_TAGS=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
           fi
-          echo "Main Image Tags: $MAIN_IMAGE_TAGS"
 
       - name: Create and Push Multi-Architecture Manifest List
         run: |
@@ -250,10 +245,6 @@ jobs:
           # Use a pattern to download all individual artifact uploads from build_binaries job
           pattern: mcpspy-binaries
           path: artifacts # Download all to a common 'artifacts' directory
-
-      - name: List downloaded files (for debug)
-        run: ls -lR artifacts/ # Will show artifacts/mcpspy-linux-amd64, etc.
-
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
