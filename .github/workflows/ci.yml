@@ -225,7 +225,7 @@ jobs:
 
   # Job to create a GitHub Release and attach both binaries and the Docker image
   release:
-    needs: [build_binaries, docker_build_and_push] # Depends on both jobs completing
+    needs: [build_binaries, create_and_push_manifest] # Depends on both jobs completing
     runs-on: ubuntu-latest
     permissions:
       contents: write
