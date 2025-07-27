@@ -196,36 +196,32 @@ jobs:
       - name: Determine main image tags
         id: determine_main_tags
         run: |
-          # Main 'latest' tag for push events on main branch
-          MAIN_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest"
-
-          # Add tag-specific version for tag pushes
-          if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
-            MAIN_TAG="$MAIN_TAG,${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "MAIN_IMAGE_TAGS=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest,${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "MAIN_IMAGE_TAGS=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
           fi
-          echo "MAIN_IMAGE_TAGS=$MAIN_TAG" >> $GITHUB_ENV
-          echo "Main Image Tags: $MAIN_TAG"
+          echo "Main Image Tags: $MAIN_IMAGE_TAGS"
 
       - name: Create and Push Multi-Architecture Manifest List
         run: |
-          # Construct the list of architecture-specific tags
+          # Define arch-specific tags
           AMD64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest-amd64"
           ARM64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest-arm64"
 
-          # If it's a tag push, use the specific version tags
+          # If tag push, adjust arch-specific tags to include the version tag
           if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
             AMD64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}-amd64"
             ARM64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}-arm64"
           fi
 
-          # Use a loop to create manifest list for each tag in MAIN_IMAGE_TAGS
-          # This creates the manifest for 'latest' and 'vX.Y.Z' if it's a tag push
-          for TAG in $(echo "${{ env.MAIN_IMAGE_TAGS }}" | tr ',' ' '); do
-            echo "Creating manifest for tag: $$TAG"
+          echo "Creating multi-arch manifests for: $MAIN_IMAGE_TAGS"
+          for TAG in $(echo "$MAIN_IMAGE_TAGS" | tr ',' ' '); do
+            echo "Creating manifest for tag: $TAG"
             docker buildx imagetools create \
-              "$$TAG" \
-              "$$AMD64_TAG" \
-              "$$ARM64_TAG"
+              --tag "$TAG" \
+              "$AMD64_TAG" \
+              "$ARM64_TAG"
           done
         env:
           # Pass the GitHub Token to allow pushing manifest lists
