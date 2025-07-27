@@ -150,13 +150,14 @@ jobs:
       - name: List downloaded files (for debug)
         run: ls -lR artifacts/ # Will show artifacts/mcpspy-linux-amd64, etc.
 
-      - name: Move binary to expected name for Dockerfile
+      - name: Verify and move binary to expected name for Dockerfile
         # The downloaded artifact will be in a subfolder (e.g., `./artifacts/mcpspy-linux-amd64`).
         # The Dockerfile expects `COPY mcpspy`. So we need to move/rename it.
         run: |
           # Check checksum
-          sha256sum -c artifacts/mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
-          mv artifacts/mcpspy-linux-${{ matrix.arch }} ./mcpspy
+          cd artifacts
+          sha256sum -c mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
+          mv mcpspy-linux-${{ matrix.arch }} ../mcpspy
 
       - name: Build and push Docker image (multi-platform)
         uses: docker/build-push-action@v5
