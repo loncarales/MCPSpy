@@ -26,12 +26,17 @@ PLATFORMS := linux-amd64 linux-arm64
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-# Note: LDFLAGS are now primarily defined directly in the CI workflow Go build commands,
-# and also used within the Dockerfile's build step.
-# For local `make build`, they are implicitly used by ./cmd/mcpspy build.
+LDFLAGS := -X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(VERSION) \
+		   -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(COMMIT) \
+		   -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(BUILD_DATE)
 
 # Source files
 BPF_SRCS := $(shell find ./bpf -type f \( -name '*.[ch]' ! -name 'vmlinux.h' \))
+
+# Build configuration
+CGO_ENABLED ?= 0
+BUILD_FLAGS := -ldflags "$(LDFLAGS)"
+TEST_FLAGS := -v -timeout=30s
 
 # Directories
 BUILD_DIR := build
@@ -57,20 +62,33 @@ generate: ## Generate eBPF Go bindings
 build: generate	## Build the binary for current platform
 	@echo "Building $(BINARY_NAME) for $(PLATFORM)..."
 	@mkdir -p $(BUILD_DIR)
-	# CGO_ENABLED MUST BE 1 for eBPF programs!
-	@CGO_ENABLED=1 $(GO) build \
-		-ldflags "-X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(VERSION) \
-				  -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(COMMIT) \
-				  -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(BUILD_DATE)" \
-		-trimpath \
-		-o $(BINARY_OUTPUT) \
-		./cmd/mcpspy
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_FLAGS) -o $(BINARY_OUTPUT) ./cmd/mcpspy
 	@echo "Binary built: $(BINARY_OUTPUT)"
+	# Create sha256 checksum
+	sha256sum $(BINARY_OUTPUT) > $(BINARY_OUTPUT).sha256sum
+	@echo "Checksum created: $(BINARY_OUTPUT).sha256sum"
+
+.PHONY: build-platforms
+build-platforms: generate ## Build the binaries for all supported platforms
+	@echo "Building $(BINARY_NAME) for all platforms..."
+	@mkdir -p $(BUILD_DIR)
+	@for platform in $(PLATFORMS); do \
+		os=$$(echo $$platform | cut -d'-' -f1); \
+		arch=$$(echo $$platform | cut -d'-' -f2); \
+		echo "Building for $$platform ($$os/$$arch)..."; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-$$platform ./cmd/mcpspy; \
+		echo "Built: $(BUILD_DIR)/$(BINARY_NAME)-$$platform"; \
+	done
+	@echo "All binaries built successfully!"
 
 # Build Docker image for current platform (optional, CI handles multi-platform)
 .PHONY: image
-image: ## Build Docker image for current platform (local development)
+image: build ## Build Docker image for current platform (local development)
 	@echo "Building Docker image for $(PLATFORM)..."
+	# Check checksum
+	@sha256sum -c $(BINARY_OUTPUT).sha256sum || exit 1
+	# Copy the binary from the build directory to the current directory
+	@cp $(BINARY_OUTPUT) ./mcpspy
 	@if docker buildx version >/dev/null 2>&1; then \
         echo "Using Docker Buildx for current platform..."; \
         $(DOCKER) buildx build --load --platform=$(GOOS)/$(GOARCH) -t $(DOCKER_IMAGE):$(IMAGE_TAG) -f deploy/docker/Dockerfile .; \
@@ -127,7 +145,7 @@ lint: generate ## Run linters
 .PHONY: test
 test: ## Run unit tests
 	@echo "Running unit tests..."
-	$(GO) test -v ./...
+	$(GO) test $(TEST_FLAGS) ./...
 
 # Setup e2e test environment
 .PHONY: test-e2e-setup

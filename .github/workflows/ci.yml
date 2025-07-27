@@ -44,16 +44,8 @@ jobs:
       - name: Run linters
         run: make lint
 
-      # Generate eBPF Go bindings on the host (amd64) for local test builds.
-      # This doesn't produce cross-arch binaries for release, just the Go source files.
-      - name: Generate eBPF Go bindings
-        run: make generate
-
       - name: Build local binary for testing
-        run: |
-          mkdir -p build
-          # Ensure CGO_ENABLED=1 for local test build as eBPF needs it
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o build/mcpspy-linux-amd64 ./cmd/mcpspy
+        run: make build
 
       - name: Run unit tests
         run: make test
@@ -62,20 +54,10 @@ jobs:
         # Requires root/privileged access due to eBPF.
         run: sudo -E make test-e2e
 
-# Job to build cross-platform binaries as release assets
+  # Job to build cross-platform binaries as release assets
   build_binaries:
     needs: [test]
-    strategy:
-      matrix:
-        include:
-        - os: ubuntu-24.04
-          goos: linux
-          goarch: amd64
-        - os: ubuntu-24.04-arm
-          goos: linux
-          goarch: arm64
-
-    runs-on: ${{ matrix.os }} # The runner type depends on the matrix entry
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -86,76 +68,57 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Install build dependencies for CGO (on ${{ matrix.goarch }} target)
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          # For now, let's try the simpler approach, relying on Go's CGO cross-compilation capabilities
-          # and assuming `libbpf` headers are generic enough or implicitly handled.
           sudo apt-get install -y clang llvm make libbpf-dev build-essential
 
       - name: Install Go tools
-        run: |
-          go install github.com/cilium/ebpf/cmd/bpf2go@latest
+        run: go install github.com/cilium/ebpf/cmd/bpf2go@latest
 
       - name: Download dependencies
         run: go mod download
-      - name: Generate eBPF Go bindings
-        # This step uses `bpf2go`. `bpf2go` generates Go source files from C BPF.
-        # It needs `clang` and `llvm` which were installed above.
-        # This output should be compatible with the target architecture binary.
-        run: make generate
 
-      - name: Build binary for ${{ matrix.goos }}-${{ matrix.goarch }}
-        # CGO_ENABLED MUST BE 1 for eBPF programs!
-        # This will use the CGO toolchain on the `ubuntu-latest` runner to build for the target architecture.
-        run: |
-          mkdir -p build
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=1 go build \
-            -ldflags "-X github.com/alex-ilgayev/mcpspy/pkg/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') \
-                      -X github.com/alex-ilgayev/mcpspy/pkg/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') \
-                      -X github.com/alex-ilgayev/mcpspy/pkg/version.Date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-            -trimpath \
-            -o build/mcpspy-${{ matrix.goos }}-${{ matrix.goarch }} \
-            ./cmd/mcpspy
+      - name: Build binaries for supported platforms
+        run: make build-platforms
 
+      # For now we'll build only for Linux AMD64 and ARM64.
+      # Ideally this should be run via another job with a matrix strategy
       - name: Create checksum
         run: |
           cd build
-          sha256sum mcpspy-${{ matrix.goos }}-${{ matrix.goarch }} > mcpspy-${{ matrix.goos }}-${{ matrix.goarch }}.sha256sum
-      - name: Run unit tests
-        run: make test
+          sha256sum mcpspy-linux-amd64 > mcpspy-linux-amd64.sha256sum
+          sha256sum mcpspy-linux-arm64 > mcpspy-linux-arm64.sha256sum
 
-      - name: Upload ${{ matrix.goos }}-${{ matrix.goarch }} binary
+      - name: Upload all binaries and checksums
         uses: actions/upload-artifact@v4
         with:
-          name: mcpspy-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: mcpspy-binaries
           path: build/
 
-# Job to build and push multi-platform Docker images
+  # Job to build and push multi-platform Docker images
   docker_build_and_push:
-    needs: [test] # Ensure tests pass before building and pushing Docker image
-    runs-on: ubuntu-latest
+    needs: [test, build_binaries] # Ensure tests pass and binaries are build before building and pushing Docker image
+    strategy:
+      matrix:
+        arch: [amd64, arm64] # Loop through architectures to build individual images
+
+    runs-on: ubuntu-latest # Use a common runner for Docker builds
+
     if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up QEMU for multi-platform builds
+      - name: Set up QEMU for multi-platform builds (needed for Buildx to build non-native)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -164,35 +127,105 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine image tags
-        id: determine_tags
+      - name: Determine image tag suffix
+        id: determine_tag_suffix
         run: |
-          TAGS="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest"
+          # Set tag suffix (e.g., arm64)
+          TAG_SUFFIX=${{ matrix.arch }}
+          # Determine full image tag
           if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
-            TAGS="$TAGS,${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}"
+            IMAGE_TAG_WITH_SUFFIX="${{ github.ref_name }}-$TAG_SUFFIX"
+          else
+            IMAGE_TAG_WITH_SUFFIX="latest-$TAG_SUFFIX"
           fi
-          echo "DOCKER_TAGS=$TAGS" >> $GITHUB_ENV
+
+          # Build the full arch-specific tag
+          ARCH_SPECIFIC_TAG="${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG_WITH_SUFFIX}"
+          # Export to environment for later steps
+          echo "ARCH_SPECIFIC_TAG=$ARCH_SPECIFIC_TAG" >> $GITHUB_ENV
+
+      - name: Download binary and checksum [${{ matrix.arch }}]
+        # Download the binaries needed for this iteration's Docker build
+        uses: actions/download-artifact@v4
+        with:
+          name: mcpspy-binaries
+          path: artifacts # Download all to a common 'artifacts' directory
+
+      - name: Verify and move binary to expected name for Dockerfile
+        # The downloaded artifact will be in a subfolder (e.g., `./artifacts/mcpspy-linux-amd64`).
+        # The Dockerfile expects `COPY mcpspy`. So we need to move/rename it.
+        run: |
+          # Check checksum
+          cd artifacts
+          sha256sum -c mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
+          mv mcpspy-linux-${{ matrix.arch }} ../mcpspy
 
       - name: Build and push Docker image (multi-platform)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./deploy/docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch }}
           push: true
-          tags: ${{ env.DOCKER_TAGS }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          tags: ${{ env.ARCH_SPECIFIC_TAG }} # Push with the arch-specific tag
 
-      # Temp fix for https://github.com/docker/build-push-action/issues/252
-      - name: Move cache to final location
+  # Job to create and push the multi-arch manifest list
+  create_and_push_manifest:
+    needs: [docker_build_and_push] # Must run after all individual Docker images are pushed
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/') # Only on pushes and tags
+    permissions:
+      contents: read
+      packages: write # Required for pushing manifest lists
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine main image tags
+        id: determine_main_tags
         run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "MAIN_IMAGE_TAGS=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest,${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "MAIN_IMAGE_TAGS=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
+          fi
 
- # Job to create a GitHub Release and attach both binaries and the Docker image
+      - name: Create and Push Multi-Architecture Manifest List
+        run: |
+          # Define arch-specific tags
+          AMD64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest-amd64"
+          ARM64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest-arm64"
+
+          # If tag push, adjust arch-specific tags to include the version tag
+          if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
+            AMD64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}-amd64"
+            ARM64_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}-arm64"
+          fi
+
+          echo "Creating multi-arch manifests for: $MAIN_IMAGE_TAGS"
+          for TAG in $(echo "$MAIN_IMAGE_TAGS" | tr ',' ' '); do
+            echo "Creating manifest for tag: $TAG"
+            docker buildx imagetools create \
+              --tag "$TAG" \
+              "$AMD64_TAG" \
+              "$ARM64_TAG"
+          done
+        env:
+          # Pass the GitHub Token to allow pushing manifest lists
+          DOCKER_CLI_EXPERIMENTAL: enabled # Required for imagetools prior to Docker 23.0
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job to create a GitHub Release and attach both binaries and the Docker image
   release:
-    needs: [build_binaries, docker_build_and_push] # Depends on both jobs completing
+    needs: [build_binaries, create_and_push_manifest] # Depends on both jobs completing
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -210,12 +243,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           # Use a pattern to download all individual artifact uploads from build_binaries job
-          pattern: mcpspy-*
+          pattern: mcpspy-binaries
           path: artifacts # Download all to a common 'artifacts' directory
-
-      - name: List downloaded files (for debug)
-        run: ls -lR artifacts/ # Will show artifacts/mcpspy-binaries-linux-amd64/mcpspy-linux-amd64, etc.
-
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
