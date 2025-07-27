@@ -147,8 +147,8 @@ jobs:
           name: mcpspy-binaries
           path: artifacts # Download all to a common 'artifacts' directory
 
-        - name: List downloaded files (for debug)
-          run: ls -lR artifacts/ # Will show artifacts/mcpspy-binaries/mcpspy-linux-amd64, etc.
+      - name: List downloaded files (for debug)
+        run: ls -lR artifacts/ # Will show artifacts/mcpspy-binaries/mcpspy-linux-amd64, etc.
 
       - name: Move binary to expected name for Dockerfile
         # The downloaded artifact will be in a subfolder (e.g., `./mcpspy-binaries/mcpspy-linux-amd64`).
