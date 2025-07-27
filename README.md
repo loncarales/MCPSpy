@@ -59,7 +59,7 @@ sudo mv mcpspy /usr/local/bin/
 
 ### Build from Source
 
-### Install Dependencies
+#### Install Dependencies
 
 First, install the required system dependencies:
 
@@ -73,11 +73,11 @@ sudo apt-get install -y python3 python3-pip python3-venv
 sudo apt-get install -y docker.io docker-buildx
 ```
 
-### Install Go
+#### Install Go
 
 MCPSpy requires Go 1.24 or later. Install Go using one of these methods:
 
-Option 1: Install from official Go website (Recommended)
+Option 1: Install from the official Go website (Recommended)
 
 ```bash
 # Download and install Go 1.24.1 (adjust version as needed)
@@ -95,16 +95,7 @@ Option 2: Install via snap
 sudo snap install go --classic
 ```
 
-###  Verify installation
-````bash
-go version
-```
-
-```bash,nocopy
-go version go1.24.1 linux/amd64
-```
-
-### Build MCPSpy
+#### Build MCPSpy
 
 Clone the repository and build MCPSpy:
 
