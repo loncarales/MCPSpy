@@ -57,6 +57,7 @@ jobs:
   # Job to build cross-platform binaries as release assets
   build_binaries:
     needs: [test]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -79,7 +80,7 @@ jobs:
         run: go mod download
 
       - name: Build binaries for supported platforms
-        run: build-platforms
+        run: make build-platforms
 
       # For now we'll build only for Linux AMD64 and ARM64.
       # Ideally this should be run via another job with a matrix strategy
@@ -101,22 +102,14 @@ jobs:
     strategy:
       matrix:
         arch: [amd64, arm64] # Loop through architectures to build individual images
-#       matrix:
-#         include:
-#         - os: ubuntu-24.04
-#           goos: linux
-#           goarch: amd64
-#         - os: ubuntu-24.04-arm
-#           goos: linux
-#           goarch: arm64
 
-    #runs-on: ${{ matrix.os }} # The runner type depends on the matrix entry
     runs-on: ubuntu-latest # Use a common runner for Docker builds
 
     if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -162,14 +155,14 @@ jobs:
             sha256sum -c mcpspy-binaries/mcpspy-linux-${{ matrix.arch }}.sha256sum || exit 1
             mv mcpspy-binaries/mcpspy-linux-${{ matrix.arch }} ./mcpspy
 
-      - name: Build and push Docker image (multi-platform)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./deploy/docker/Dockerfile
-          platforms: linux/${{ matrix.arch }}
-          push: true
-          tags: ${{ env.ARCH_SPECIFIC_TAG }} # Push with the arch-specific tag
+        - name: Build and push Docker image (multi-platform)
+            uses: docker/build-push-action@v5
+            with:
+              context: .
+              file: ./deploy/docker/Dockerfile
+              platforms: linux/${{ matrix.arch }}
+              push: true
+              tags: ${{ env.ARCH_SPECIFIC_TAG }} # Push with the arch-specific tag
 
   # Job to create and push the multi-arch manifest list
   create_and_push_manifest:
