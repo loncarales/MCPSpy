@@ -251,7 +251,7 @@ jobs:
         with:
           name: Release ${{ env.RELEASE_TAG }}
           tag_name: ${{ github.ref }}
-          files: artifacts/mcpspy-*
+          files: artifacts/**/mcpspy-*
           body: |
             Release of MCPSpy version ${{ env.RELEASE_TAG }}!
 
