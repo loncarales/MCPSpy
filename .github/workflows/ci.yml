@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ci-cd]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [ci-cd]
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  DOCKER_IMAGE: alex-ilgayev/mcpspy
+  DOCKER_IMAGE: loncarales/mcpspy
 
 permissions:
   contents: read
