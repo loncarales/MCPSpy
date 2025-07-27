@@ -99,7 +99,6 @@ jobs:
   docker_build_and_push:
     needs: [test, build_binaries] # Ensure tests pass and binaries are build before building and pushing Docker image
     strategy:
-    strategy:
       matrix:
         arch: [amd64, arm64] # Loop through architectures to build individual images
 #       matrix:
