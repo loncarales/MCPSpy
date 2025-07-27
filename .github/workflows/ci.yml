@@ -130,15 +130,20 @@ jobs:
       - name: Determine image tag suffix
         id: determine_tag_suffix
         run: |
-          # Example: latest-amd64, v0.0.1-arm64
+          # Set tag suffix (e.g., arm64)
           TAG_SUFFIX=${{ matrix.arch }}
+          # Determine full image tag
           if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
-            echo "IMAGE_TAG_WITH_SUFFIX=${{ github.ref_name }}-$TAG_SUFFIX" >> $GITHUB_ENV
+            IMAGE_TAG_WITH_SUFFIX="${{ github.ref_name }}-$TAG_SUFFIX"
           else
-            echo "IMAGE_TAG_WITH_SUFFIX=latest-$TAG_SUFFIX" >> $GITHUB_ENV
+            IMAGE_TAG_WITH_SUFFIX="latest-$TAG_SUFFIX"
           fi
-          echo "ARCH_SPECIFIC_TAG=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_TAG_WITH_SUFFIX }}" >> $GITHUB_ENV
-          echo "Architecture specific tag: ${{ env.ARCH_SPECIFIC_TAG }}"
+
+          # Build the full arch-specific tag
+          ARCH_SPECIFIC_TAG="${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG_WITH_SUFFIX}"
+          # Export to environment for later steps
+          echo "ARCH_SPECIFIC_TAG=$ARCH_SPECIFIC_TAG" >> $GITHUB_ENV
+          echo "Architecture specific tag: $ARCH_SPECIFIC_TAG"
 
       - name: Download binary and checksum [${{ matrix.arch }}]
         # Download the binaries needed for this iteration's Docker build
