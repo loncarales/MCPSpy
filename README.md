@@ -8,10 +8,10 @@
 <pre>
 ███╗   ███╗ ██████╗██████╗ ███████╗██████╗ ██╗   ██╗
 ████╗ ████║██╔════╝██╔══██╗██╔════╝██╔══██╗╚██╗ ██╔╝
-██╔████╔██║██║     ██████╔╝███████╗██████╔╝ ╚████╔╝ 
-██║╚██╔╝██║██║     ██╔═══╝ ╚════██║██╔═══╝   ╚██╔╝  
-██║ ╚═╝ ██║╚██████╗██║     ███████║██║        ██║   
-╚═╝     ╚═╝ ╚═════╝╚═╝     ╚══════╝╚═╝        ╚═╝   
+██╔████╔██║██║     ██████╔╝███████╗██████╔╝ ╚████╔╝
+██║╚██╔╝██║██║     ██╔═══╝ ╚════██║██╔═══╝   ╚██╔╝
+██║ ╚═╝ ██║╚██████╗██║     ███████║██║        ██║
+╚═╝     ╚═╝ ╚═════╝╚═╝     ╚══════╝╚═╝        ╚═╝
 </pre>
 <b>MCPSpy - Real-time monitoring for Model Context Protocol communication using eBPF</b>
 </div>
@@ -47,25 +47,73 @@ The Model Context Protocol is becoming the standard for AI tool integration, but
 - Linux kernel version 5.10 or later
 - Root privileges (required for eBPF)
 
-### Download Pre-built Binary
+### Download Pre-built Binary (Auto-detect OS + Arch)
 
 Download the latest release from the [releases page](https://github.com/alex-ilgayev/mcpspy/releases):
 
 ```bash
-wget https://github.com/alex-ilgayev/mcpspy/releases/latest/download/mcpspy
-chmod +x mcpspy
-sudo mv mcpspy /usr/local/bin/
+# Set platform-aware binary name
+BIN="mcpspy-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')"
+
+# Download the correct binary
+wget "https://github.com/alex-ilgayev/mcpspy/releases/latest/download/${BIN}"
+
+# Make it executable and move to a directory in your PATH
+chmod +x "${BIN}"
+sudo mv "${BIN}" /usr/local/bin/mcpspy
 ```
+
+> ✅ Note: Currently supported platforms: linux-amd64, linux-arm64
 
 ### Build from Source
 
+#### Install Dependencies
+
+First, install the required system dependencies:
+
 ```bash
+sudo apt-get update
+# Install build essentials, eBPF dependencies
+sudo apt-get install -y clang clang-format llvm make libbpf-dev build-essential
+# Install Python 3 and pip (for e2e tests)
+sudo apt-get install -y python3 python3-pip python3-venv
+# Install docker and buildx (if not already installed)
+sudo apt-get install -y docker.io docker-buildx
+```
+
+#### Install Go
+
+MCPSpy requires Go 1.24 or later. Install Go using one of these methods:
+
+Option 1: Install from the official Go website (Recommended)
+
+```bash
+# Download and install Go 1.24.1 (adjust version as needed)
+wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
+
+# Add Go to PATH (add this to your ~/.bashrc or ~/.profile for persistence)
+export PATH=$PATH:/usr/local/go/bin
+```
+
+Option 2: Install via snap
+
+```bash
+sudo snap install go --classic
+```
+
+#### Build MCPSpy
+
+Clone the repository and build MCPSpy:
+
+```bash
+# Clone the repository
 git clone https://github.com/alex-ilgayev/mcpspy.git
 cd mcpspy
 
-sudo apt-get update
-sudo apt-get install -y clang llvm make libbpf-dev
-make
+# Build the project
+make all
 ```
 
 ### Docker
@@ -167,7 +215,7 @@ MCPSpy consists of several components:
 
 ```bash
 # Generate eBPF bindings and build
-make
+make all
 
 # Build Docker image
 make image
