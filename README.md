@@ -63,9 +63,7 @@ chmod +x "${BIN}"
 sudo mv "${BIN}" /usr/local/bin/mcpspy
 ```
 
-> ✅ Note: Currently supported values:
-    - linux-amd64
-    - linux-arm64
+> ✅ Note: Currently supported platforms: linux-amd64, linux-arm64
 
 ### Build from Source
 
