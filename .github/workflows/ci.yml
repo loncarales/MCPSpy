@@ -81,7 +81,7 @@ jobs:
         run: go mod download
 
       - name: Build assets (binaries and checksum) for supported platforms
-        run: make build-assets
+        run: make release-assets
 
       - name: Upload all binaries and checksums
         uses: actions/upload-artifact@v4
