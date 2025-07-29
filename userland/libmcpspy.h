@@ -112,6 +112,7 @@ int is_https_port(int port);
 void get_socket_info(int sockfd, char* addr_buf, int* port);
 const char* transport_type_to_string(transport_type_t type);
 const char* event_type_to_string(event_type_t type);
+void create_and_log_event(int fd, const void* buf, size_t size, event_type_t event_type, transport_type_t transport);
 
 // JSON-RPC detection
 int is_jsonrpc_message(const char* buf, size_t size);

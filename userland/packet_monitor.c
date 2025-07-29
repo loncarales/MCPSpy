@@ -1,17 +1,50 @@
 #include "libmcpspy.h"
+#ifdef HAVE_PCAP
 #include <pcap.h>
+#ifdef __linux__
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#else
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#endif
 #include <arpa/inet.h>
+#endif
+
+// Platform-specific IP header handling
+#ifdef __linux__
+#define IP_HEADER_PROTOCOL(ip) ((ip)->protocol)
+#define IP_HEADER_IHL(ip) ((ip)->ihl)
+#define IP_HEADER_SADDR(ip) ((ip)->saddr)
+#define IP_HEADER_DADDR(ip) ((ip)->daddr)
+#define TCP_HEADER_DOFF(tcp) ((tcp)->doff)
+#define TCP_HEADER_SOURCE(tcp) ((tcp)->source)
+typedef struct iphdr ip_header_t;
+#else
+// macOS/BSD uses different field names
+#define IP_HEADER_PROTOCOL(ip) ((ip)->ip_p)
+#define IP_HEADER_IHL(ip) ((ip)->ip_hl)
+#define IP_HEADER_SADDR(ip) ((ip)->ip_src.s_addr)
+#define IP_HEADER_DADDR(ip) ((ip)->ip_dst.s_addr)
+#define TCP_HEADER_DOFF(tcp) ((tcp)->th_off)
+#define TCP_HEADER_SOURCE(tcp) ((tcp)->th_sport)
+typedef struct ip ip_header_t;
+#endif
 
 // Packet monitoring state
 static int packet_initialized = 0;
 static pthread_t packet_thread;
 static int packet_running = 0;
+#ifdef HAVE_PCAP
 static pcap_t* pcap_handle = NULL;
+#endif
 
+#ifdef HAVE_PCAP
 // Packet capture callback
 static void packet_callback(u_char *user_data, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
+    (void)user_data; // Suppress unused parameter warning
+    
     if (!g_initialized || !g_config.monitor_packets) {
         return;
     }
@@ -22,20 +55,20 @@ static void packet_callback(u_char *user_data, const struct pcap_pkthdr *pkthdr,
     }
 
     // Parse IP header
-    struct iphdr* ip_header = (struct iphdr*)(packet + 14);
-    if (ip_header->protocol != IPPROTO_TCP) {
+    ip_header_t* ip_header = (ip_header_t*)(packet + 14);
+    if (IP_HEADER_PROTOCOL(ip_header) != IPPROTO_TCP) {
         return; // Only interested in TCP packets
     }
 
     // Parse TCP header
-    struct tcphdr* tcp_header = (struct tcphdr*)(packet + 14 + (ip_header->ihl * 4));
-    int tcp_header_size = tcp_header->doff * 4;
+    struct tcphdr* tcp_header = (struct tcphdr*)(packet + 14 + (IP_HEADER_IHL(ip_header) * 4));
+    int tcp_header_size = TCP_HEADER_DOFF(tcp_header) * 4;
     
     // Get payload
-    int ip_header_size = ip_header->ihl * 4;
+    int ip_header_size = IP_HEADER_IHL(ip_header) * 4;
     int total_header_size = 14 + ip_header_size + tcp_header_size;
     
-    if (pkthdr->len <= total_header_size) {
+    if (pkthdr->len <= (bpf_u_int32)total_header_size) {
         return; // No payload
     }
 
@@ -63,17 +96,21 @@ static void packet_callback(u_char *user_data, const struct pcap_pkthdr *pkthdr,
 
     // Get network addresses
     struct in_addr src_addr, dst_addr;
-    src_addr.s_addr = ip_header->saddr;
-    dst_addr.s_addr = ip_header->daddr;
+    src_addr.s_addr = IP_HEADER_SADDR(ip_header);
+    dst_addr.s_addr = IP_HEADER_DADDR(ip_header);
     
     inet_ntop(AF_INET, &src_addr, event.remote_addr, INET_ADDRSTRLEN);
-    event.remote_port = ntohs(tcp_header->source);
+    event.remote_port = ntohs(TCP_HEADER_SOURCE(tcp_header));
 
     mcpspy_log_event(&event);
 }
+#endif
 
+#ifdef HAVE_PCAP
 // Packet monitoring thread
 static void* packet_monitor_thread(void* arg) {
+    (void)arg; // Suppress unused parameter warning
+    
     if (!pcap_handle) {
         return NULL;
     }
@@ -93,9 +130,11 @@ static void* packet_monitor_thread(void* arg) {
     
     return NULL;
 }
+#endif
 
 // Initialize packet capture monitoring
 int packet_monitor_init(void) {
+#ifdef HAVE_PCAP
     if (packet_initialized) {
         return 0; // Already initialized
     }
@@ -103,19 +142,29 @@ int packet_monitor_init(void) {
     char errbuf[PCAP_ERRBUF_SIZE];
     char* device = NULL;
 
-    // Find default device if not specified
-    device = pcap_lookupdev(errbuf);
-    if (!device) {
-        fprintf(stderr, "mcpspy: Could not find default device: %s\n", errbuf);
+    // Find default device if not specified - use pcap_findalldevs instead of deprecated pcap_lookupdev
+    pcap_if_t *alldevs;
+    if (pcap_findalldevs(&alldevs, errbuf) == -1) {
+        fprintf(stderr, "mcpspy: Could not find devices: %s\n", errbuf);
         return -1;
     }
+    
+    if (alldevs == NULL) {
+        fprintf(stderr, "mcpspy: No devices found\n");
+        return -1;
+    }
+    
+    device = alldevs->name; // Use first device
 
     // Open device for packet capture
     pcap_handle = pcap_open_live(device, BUFSIZ, 1, 1000, errbuf);
     if (!pcap_handle) {
         fprintf(stderr, "mcpspy: Could not open device %s: %s\n", device, errbuf);
+        pcap_freealldevs(alldevs);
         return -1;
     }
+
+    pcap_freealldevs(alldevs);
 
     // Set filter for TCP traffic on common MCP ports
     struct bpf_program filter;
@@ -146,10 +195,15 @@ int packet_monitor_init(void) {
     
     packet_initialized = 1;
     return 0;
+#else
+    fprintf(stderr, "mcpspy: Packet monitoring not available (libpcap not found)\n");
+    return -1;
+#endif
 }
 
 // Cleanup packet monitoring
 void packet_monitor_cleanup(void) {
+#ifdef HAVE_PCAP
     if (!packet_initialized) {
         return;
     }
@@ -168,4 +222,5 @@ void packet_monitor_cleanup(void) {
     }
     
     packet_initialized = 0;
+#endif
 }

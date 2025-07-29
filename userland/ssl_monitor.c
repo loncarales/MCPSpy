@@ -107,6 +107,7 @@ static int generate_mitm_certificate(void) {
 
 // SSL monitoring thread
 static void* ssl_monitor_thread(void* arg) {
+    (void)arg; // Suppress unused parameter warning
     // This thread could implement SSL proxy or certificate management
     // For now, SSL monitoring is handled by the SSL_read/SSL_write hooks
     

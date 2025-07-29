@@ -1,7 +1,11 @@
 #define _GNU_SOURCE
 #include "libmcpspy.h"
 #include <sys/syscall.h>
+#ifdef __linux__
 #include <linux/limits.h>
+#else
+#include <limits.h>
+#endif
 
 // Global state
 mcpspy_config_t g_config = {0};
@@ -234,7 +238,7 @@ void mcpspy_log_event(const mcp_event_t* event) {
 }
 
 // Create and log event
-static void create_and_log_event(int fd, const void* buf, size_t size, event_type_t event_type, transport_type_t transport) {
+void create_and_log_event(int fd, const void* buf, size_t size, event_type_t event_type, transport_type_t transport) {
     if (!g_initialized || !is_jsonrpc_message((const char*)buf, size)) {
         return;
     }
@@ -487,6 +491,7 @@ void mcpspy_load_config_from_env(mcpspy_config_t* config) {
 // CGO interface functions
 int mcpspy_start_monitoring(const char* config_json) {
     // For now, use default config - TODO: parse JSON config
+    (void)config_json; // Suppress unused parameter warning
     return mcpspy_init(NULL);
 }
 

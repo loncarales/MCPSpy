@@ -3,7 +3,9 @@ package userland
 /*
 #cgo CFLAGS: -I../../userland
 #cgo LDFLAGS: -L../../userland -lmcpspy -ldl -lpthread
-#cgo pkg-config: libpcap openssl
+#cgo darwin CFLAGS: -I/opt/homebrew/opt/libpcap/include -I/opt/homebrew/Cellar/openssl@3/3.5.1/include
+#cgo darwin LDFLAGS: -L/opt/homebrew/opt/libpcap/lib -lpcap -L/opt/homebrew/Cellar/openssl@3/3.5.1/lib -lssl -lcrypto
+#cgo linux pkg-config: libpcap openssl
 
 #include <stdlib.h>
 #include <string.h>

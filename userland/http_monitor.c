@@ -20,6 +20,7 @@ int is_http_port(int port) {
 
 // HTTP monitoring thread
 static void* http_monitor_thread(void* arg) {
+    (void)arg; // Suppress unused parameter warning
     // This thread could implement additional HTTP-specific monitoring
     // For now, HTTP monitoring is handled by the socket hooks in main library
     
