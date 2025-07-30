@@ -77,18 +77,19 @@ jobs:
           host-mount: . # Mount the current workspace into the VM
           install-dependencies: "true"
           cmd: |
+            echo ""
             # Print the kernel version of the test VM
             echo "Kernel Version: "
             uname -a
-            echo "Whoami: "
-            whoami
 
+            echo ""
             # goto where host is mounted
             cd /host
 
-            # @TODO MOVE the python venv build to build step
-            apt-get update && apt-get install -y python3 python3-pip python3-venv
+            # @TODO Could move the python venv build to build step so to speed up the test
+            sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-venv
             make test-e2e-setup
 
+            echo ""
             echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
-            tests/venv/bin/python tests/e2e_test.py --mcpspy ./mcpspy-linux-amd64
+            sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy ./mcpspy-linux-amd64
