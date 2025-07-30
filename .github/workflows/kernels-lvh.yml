@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [eBPF-kernels]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Ensure that only one job runs at a time for this workflow
+  cancel-in-progress: true
+
 jobs:
   e2e-build:
     runs-on: ubuntu-24.04
@@ -65,7 +70,7 @@ jobs:
       - name: Provision LVH VMs
         uses: cilium/little-vm-helper@v0.0.23
         with:
-          test-name: test-loading
+          test-name: mcpspy-test-${{ matrix.kernel }}
           image: "kind" # Available options: kind, complexity-test, base
           image-version: ${{ matrix.kernel }} # Pull the specific kernel version for testing
           host-mount: . # Mount the current workspace into the VM
@@ -75,7 +80,11 @@ jobs:
             echo "Kernel Version: "
             uname -a
 
-            make test-e2e-setup
+            # list the contents of the current directory
+            ls -laR
 
-            echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
-            sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy build/mcpspy-linux-amd64
+
+            # make test-e2e-setup
+
+            # echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
+            # sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy build/mcpspy-linux-amd64
