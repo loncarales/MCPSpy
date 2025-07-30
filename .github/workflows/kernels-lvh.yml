@@ -51,7 +51,7 @@ jobs:
         kernel:
 #           - "6.6-20250616.013250-amd64"
 #           - "5.15-20250616.013250-amd64"
-          - "5.10-main-amd64"
+          - "5.10-20250610.043823-amd64"
 
     steps:
       - name: Checkout code
@@ -63,10 +63,10 @@ jobs:
           name: mcpspy-binary
 
       - name: Provision LVH VMs
-        uses: cilium/little-vm-helper@v0.0.26
+        uses: cilium/little-vm-helper@v0.0.23
         with:
           test-name: test-loading
-          image: "base" # Available options: kind, complexity-test, base
+          image: "kind" # Available options: kind, complexity-test, base
           image-version: ${{ matrix.kernel }} # Pull the specific kernel version for testing
           host-mount: . # Mount the current workspace into the VM
           install-dependencies: "false"
