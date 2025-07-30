@@ -83,9 +83,8 @@ jobs:
 
             # goto where host is mounted
             cd /host
-            ls -lah
 
-            # make test-e2e-setup
+            make test-e2e-setup
 
-            # echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
-            # sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy build/mcpspy-linux-amd64
+            echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
+            tests/venv/bin/python tests/e2e_test.py --mcpspy ./mcpspy-linux-amd64
