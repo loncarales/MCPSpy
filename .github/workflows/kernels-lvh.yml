@@ -54,9 +54,9 @@ jobs:
         # List of kernel versions to test against
         # Find available tags here: https://quay.io/repository/lvh-images/kind?tab=tags
         kernel:
-#           - "6.6-20250616.013250-amd64"
-#           - "5.15-20250616.013250-amd64"
-          - "5.10-20250610.043823-amd64"
+          - "5.10-20250729.205433-amd64"
+#          - "5.15-20250729.205433-amd64"
+
     timeout-minutes: 10
 
     steps:
@@ -84,7 +84,7 @@ jobs:
             # goto where host is mounted
             cd /host
 
-            apt install -y python3 python3-pip python3-venv
+            apt-get update && apt-get install -y python3 python3-pip python3-venv
             make test-e2e-setup
 
             echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
