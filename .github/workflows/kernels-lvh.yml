@@ -55,7 +55,7 @@ jobs:
         # Find available tags here: https://quay.io/repository/lvh-images/kind?tab=tags
         kernel:
           - "5.10-20250729.205433-amd64"
-#          - "5.15-20250729.205433-amd64"
+          - "5.15-20250729.205433-amd64"
 
     timeout-minutes: 10
 
@@ -80,10 +80,13 @@ jobs:
             # Print the kernel version of the test VM
             echo "Kernel Version: "
             uname -a
+            echo "Whoami: "
+            whoami
 
             # goto where host is mounted
             cd /host
 
+            # @TODO MOVE the python venv build to build step
             apt-get update && apt-get install -y python3 python3-pip python3-venv
             make test-e2e-setup
 
