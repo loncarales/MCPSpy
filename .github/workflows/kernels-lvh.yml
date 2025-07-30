@@ -69,7 +69,7 @@ jobs:
           image: "kind" # Available options: kind, complexity-test, base
           image-version: ${{ matrix.kernel }} # Pull the specific kernel version for testing
           host-mount: . # Mount the current workspace into the VM
-          install-dependencies: "false"
+          install-dependencies: "true"
           cmd: |
             # Print the kernel version of the test VM
             echo "Kernel Version: "
