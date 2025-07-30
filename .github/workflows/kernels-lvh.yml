@@ -56,7 +56,7 @@ jobs:
         kernel:
 #           - "6.6-20250616.013250-amd64"
 #           - "5.15-20250616.013250-amd64"
-          - "5.10-20250610.043823-amd64"
+          - "5.10-main-amd64"
     timeout-minutes: 10
 
     steps:
@@ -81,14 +81,9 @@ jobs:
             echo "Kernel Version: "
             uname -a
 
-            # list the contents of the current directory
-            ls -laR
-
-            cd /host/linux
-
-            # list the contents of the current directory
-            ls -laR
-
+            # goto where host is mounted
+            cd /host
+            ls -lah
 
             # make test-e2e-setup
 
