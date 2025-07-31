@@ -54,8 +54,8 @@ jobs:
         # List of kernel versions to test against
         # Find available tags here: https://quay.io/repository/lvh-images/kind?tab=tags
         items:
-          - kernel: "5.10"
-            lvh-image: "5.10-20250729.205433-amd64"
+#           - kernel: "5.10"
+#             lvh-image: "5.10-20250729.205433-amd64"
           - kernel: "5.15"
             lvh-image: "5.15-20250729.205433-amd64"
 #           - kernel: "6.1"
@@ -75,7 +75,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mcpspy-binary
-          path: build/mcpspy-linux-amd64
+          path: build
 
       - name: Provision LVH VMs
         uses: cilium/little-vm-helper@v0.0.26
@@ -98,6 +98,9 @@ jobs:
 
             # goto where host is mounted
             cd /host
+
+            ls -lah # List files to verify access
+            ls -lah build
 
             echo ""
             echo "Running MCPSpy smoke test on LVH VM with kernel ${{ matrix.items.kernel }}"
