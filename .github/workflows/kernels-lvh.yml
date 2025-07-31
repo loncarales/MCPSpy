@@ -55,8 +55,8 @@ jobs:
         # Find available tags here: https://quay.io/repository/lvh-images/kind?tab=tags
         kernel:
           - "5.10-20250729.205433-amd64"
-#          - "5.15-20250729.205433-amd64"
-
+          - "5.15-20250729.205433-amd64"
+          - "6.1-20250729.205433-amd64"
     timeout-minutes: 10
 
     steps:
@@ -72,7 +72,7 @@ jobs:
         uses: cilium/little-vm-helper@v0.0.26
         with:
           test-name: mcpspy-test-${{ matrix.kernel }}
-          image: "complexity-test" # Available options: kind, complexity-test, base (needs authentication)
+          image: "kind" # Available options: kind, complexity-test, base (needs authentication)
           image-version: ${{ matrix.kernel }} # Pull the specific kernel version for testing
           host-mount: . # Mount the current workspace into the VM
           install-dependencies: "true"
@@ -81,6 +81,12 @@ jobs:
             # Print the kernel version of the test VM
             echo "Kernel Version: "
             uname -a
+            echo "Kernel Release: "
+            bpftool feature probe
+            echo "Kernel Version: "
+            dmesg | grep BPF
+
+            echo ""
             echo "Whoami: "
             whoami
 
@@ -94,7 +100,7 @@ jobs:
             echo ""
             echo "Running MCPSpy on LVH VM with kernel ${{ matrix.kernel }}"
             chmod +x ./mcpspy-linux-amd64
-            sudo nohup ./mcpspy-linux-amd64 > mcpspy-output.log 2>&1 &
+            nohup ./mcpspy-linux-amd64 > mcpspy-output.log 2>&1 &
             sleep 5 # Wait for MCPSpy to start
 
             echo ""
