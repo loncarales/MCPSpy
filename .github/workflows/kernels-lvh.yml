@@ -100,4 +100,3 @@ jobs:
             echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
             chmod +x ./mcpspy-linux-amd64
             tests/venv/bin/python tests/e2e_test.py --mcpspy ./mcpspy-linux-amd64
-x
