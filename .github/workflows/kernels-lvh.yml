@@ -89,8 +89,12 @@ jobs:
             cd /host
 
             echo ""
-            echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
-            nohup ./mcpspy-linux-amd64 > mcpspy-output.log 2>&1 &
+            ls -lah # List files to verify access
+
+            echo ""
+            echo "Running MCPSpy on LVH VM with kernel ${{ matrix.kernel }}"
+            chmod +x ./mcpspy-linux-amd64
+            sudo nohup ./mcpspy-linux-amd64 > mcpspy-output.log 2>&1 &
 
             echo ""
             cat mcpspy-output.log
