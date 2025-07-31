@@ -2,9 +2,9 @@ name: Test MCPSpy across various Linux Kernels with LVH
 
 on:
   push:
-    branches: [eBPF-kernels]
+    branches: [e2e-kernel-tests]
   pull_request:
-    branches: [eBPF-kernels]
+    branches: [e2e-kernel-tests]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
