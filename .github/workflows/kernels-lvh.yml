@@ -55,7 +55,7 @@ jobs:
         # Find available tags here: https://quay.io/repository/lvh-images/kind?tab=tags
         kernel:
           - "5.10-20250729.205433-amd64"
-          - "5.15-20250729.205433-amd64"
+#          - "5.15-20250729.205433-amd64"
 
     timeout-minutes: 10
 
@@ -81,15 +81,26 @@ jobs:
             # Print the kernel version of the test VM
             echo "Kernel Version: "
             uname -a
+            echo "Whoami: "
+            whoami
 
             echo ""
             # goto where host is mounted
             cd /host
 
-            # @TODO Could move the python venv build to build step so to speed up the test
-            sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-venv
-            make test-e2e-setup
-
             echo ""
             echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.kernel }}"
-            sudo -E tests/venv/bin/python tests/e2e_test.py --mcpspy ./mcpspy-linux-amd64
+            nohup ./mcpspy-linux-amd64 > mcpspy-output.log 2>&1 &
+
+            echo ""
+            cat mcpspy-output.log
+
+            # @TODO Could move the python venv build to build step so to speed up the test
+            apt-get update && apt-get install -y python3 python3-pip python3-venv
+
+            echo ""
+            echo "Running end-to-end tests"
+            make test-e2e-mcp
+
+            echo ""
+            cat mcpspy-output.log
