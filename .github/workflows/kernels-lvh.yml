@@ -1,7 +1,10 @@
 name: Test MCPSpy across various Linux Kernels with LVH
 
+# on:
+#   workflow_dispatch: # Allows manually triggering the workflow from the GitHub UI
 on:
-  workflow_dispatch: # Allows manually triggering the workflow from the GitHub UI
+  push:
+    branches: ["e2e-kernel-tests"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
