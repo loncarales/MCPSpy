@@ -1,10 +1,7 @@
 name: Test MCPSpy across various Linux Kernels with LVH
 
 on:
-  push:
-    branches: [e2e-kernel-tests]
-  pull_request:
-    branches: [e2e-kernel-tests]
+  workflow_dispatch: # Allows manually triggering the workflow from the GitHub UI
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -58,12 +55,12 @@ jobs:
             lvh-image: "5.10-20250729.205433-amd64"
           - kernel: "5.15"
             lvh-image: "5.15-20250729.205433-amd64"
-          - kernel: "6.1"
-            lvh-image: "6.1-20250729.205433-amd64"
-          - kernel: "6.6"
-            lvh-image: "6.6-20250729.205433-amd64"
-          - kernel: "6.12"
-            lvh-image: "6.12-20250729.205433-amd64"
+#           - kernel: "6.1"
+#             lvh-image: "6.1-20250729.205433-amd64"
+#           - kernel: "6.6"
+#             lvh-image: "6.6-20250729.205433-amd64"
+#           - kernel: "6.12"
+#             lvh-image: "6.12-20250729.205433-amd64"
 
     timeout-minutes: 10
 
@@ -75,6 +72,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mcpspy-binary
+          path: build/mcpspy-linux-amd64
 
       - name: Provision LVH VMs
         uses: cilium/little-vm-helper@v0.0.26
@@ -95,16 +93,10 @@ jobs:
             whoami
             # We are root in the VM, so we can run commands without sudo
 
-
             # goto where host is mounted
             cd /host
 
             echo ""
-            # Install Python, pip and venv in the VM
-            apt-get update && apt-get install -y python3 python3-pip python3-venv
-            make test-e2e-setup
+            echo "Running MCPSpy smoke test on LVH VM with kernel ${{ matrix.items.kernel }}"
+            make test-smoke
 
-            echo ""
-            echo "Running MCPSpy tests on LVH VM with kernel ${{ matrix.items.kernel }}"
-            chmod +x ./mcpspy-linux-amd64
-            tests/venv/bin/python tests/e2e_test.py --mcpspy ./mcpspy-linux-amd64

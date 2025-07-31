@@ -50,9 +50,11 @@ jobs:
       - name: Run unit tests
         run: make test
 
+      - name: Run simple smoke test
+        run: make test-smoke
+
       - name: Run end-to-end tests
-        # Requires root/privileged access due to eBPF.
-        run: sudo -E make test-e2e
+        run: make test-e2e
 
   # Job to build cross-platform binaries as release assets
   build_binaries:
