@@ -54,8 +54,8 @@ jobs:
         # List of kernel versions to test against
         # Find available tags here: https://quay.io/repository/lvh-images/kind?tab=tags
         items:
-#           - kernel: "5.10"
-#             lvh-image: "5.10-20250729.205433-amd64"
+          - kernel: "5.10"
+            lvh-image: "5.10-20250729.205433-amd64"
           - kernel: "5.15"
             lvh-image: "5.15-20250729.205433-amd64"
 #           - kernel: "6.1"
@@ -94,15 +94,11 @@ jobs:
             echo ""
             echo "Whoami: "
             whoami
-            # We are root in the VM, so we can run commands without sudo
+            # We are root in the VM, so we could run commands without sudo
 
             # goto where host is mounted
             cd /host
 
-            ls -lah # List files to verify access
-            ls -lah build
-
             echo ""
             echo "Running MCPSpy smoke test on LVH VM with kernel ${{ matrix.items.kernel }}"
             make test-smoke
-
