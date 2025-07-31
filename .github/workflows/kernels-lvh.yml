@@ -1,10 +1,7 @@
 name: Test MCPSpy across various Linux Kernels with LVH
 
-# on:
-#   workflow_dispatch: # Allows manually triggering the workflow from the GitHub UI
 on:
-  push:
-    branches: ["e2e-kernel-tests"]
+  workflow_dispatch: # Allows manually triggering the workflow from the GitHub UI
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -58,12 +55,12 @@ jobs:
             lvh-image: "5.10-20250729.205433-amd64"
           - kernel: "5.15"
             lvh-image: "5.15-20250729.205433-amd64"
-#           - kernel: "6.1"
-#             lvh-image: "6.1-20250729.205433-amd64"
-#           - kernel: "6.6"
-#             lvh-image: "6.6-20250729.205433-amd64"
-#           - kernel: "6.12"
-#             lvh-image: "6.12-20250729.205433-amd64"
+          - kernel: "6.1"
+            lvh-image: "6.1-20250729.205433-amd64"
+          - kernel: "6.6"
+            lvh-image: "6.6-20250729.205433-amd64"
+          - kernel: "6.12"
+            lvh-image: "6.12-20250729.205433-amd64"
 
     timeout-minutes: 10
 
