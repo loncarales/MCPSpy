@@ -34,7 +34,7 @@ spec:
       hostPID: true # Required to monitor processes across the node
       containers:
         - name: mcpspy
-          image: ghcr.io/loncarales/mcpspy:v0.0.6
+          image: ghcr.io/loncarales/mcpspy:v0.0.7
           imagePullPolicy: Always
           securityContext:
             privileged: true # Required for eBPF access
