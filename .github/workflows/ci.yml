@@ -297,7 +297,7 @@ jobs:
 
       - name: Update Kubernetes deployment version
         run: |
-          yq eval '.spec.template.spec.containers[0].image = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ env.RELEASE_TAG }}"' \
+          yq eval '(select(.kind == "DaemonSet") | .spec.template.spec.containers[0].image) = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ env.RELEASE_TAG }}"' \
             -i deploy/kubernetes/mcpspy.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
