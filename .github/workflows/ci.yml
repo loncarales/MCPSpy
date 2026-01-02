@@ -231,7 +231,7 @@ jobs:
   helm_publish:
     needs: [test]
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
       packages: write
@@ -242,7 +242,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v4.3.0
         with:
           version: v3.14.4
 
@@ -254,21 +254,18 @@ jobs:
           CHART_NAME=$(yq eval '.name' deploy/charts/mcpspy/Chart.yaml)
           CHART_VERSION=$(yq eval '.version' deploy/charts/mcpspy/Chart.yaml)
 
-          # If this is a tag push, we might want to update the chart version to match the tag
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            # Strip 'v' prefix if present
-            TAG_VERSION=${GITHUB_REF_NAME#v}
-            yq eval ".version = \"$TAG_VERSION\"" -i deploy/charts/mcpspy/Chart.yaml
-            yq eval ".appVersion = \"$GITHUB_REF_NAME\"" -i deploy/charts/mcpspy/Chart.yaml
-            CHART_VERSION=$TAG_VERSION
+          # Strip 'v' prefix if present
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          yq eval ".version = \"$TAG_VERSION\"" -i deploy/charts/mcpspy/Chart.yaml
+          yq eval ".appVersion = \"$GITHUB_REF_NAME\"" -i deploy/charts/mcpspy/Chart.yaml
+          CHART_VERSION=$TAG_VERSION
 
-            # Commit updated Chart.yaml
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add deploy/charts/mcpspy/Chart.yaml
-            git commit -m "chore: update helm chart version to $TAG_VERSION" || echo "No changes to commit"
-            git push
-          fi
+          # Commit updated Chart.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/charts/mcpspy/Chart.yaml
+          git commit -m "chore: update helm chart version to $TAG_VERSION" || echo "No changes to commit"
+          git push
 
           helm package deploy/charts/mcpspy --destination .
           helm push ${CHART_NAME}-${CHART_VERSION}.tgz oci://${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/charts
