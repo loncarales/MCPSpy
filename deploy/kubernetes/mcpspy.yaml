@@ -36,6 +36,8 @@ spec:
         - name: mcpspy
           image: ghcr.io/loncarales/mcpspy:v0.0.7
           imagePullPolicy: Always
+          stdin: true
+          tty: true
           securityContext:
             privileged: true # Required for eBPF access
           resources:
