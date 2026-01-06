@@ -34,7 +34,19 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text string `json:"text,omitempty"`
+	Text             string                  `json:"text,omitempty"`
+	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
+	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
+}
+
+type geminiFunctionCall struct {
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+type geminiFunctionResponse struct {
+	Name     string          `json:"name"`
+	Response json.RawMessage `json:"response,omitempty"`
 }
 
 type geminiGenConfig struct {
@@ -231,4 +243,111 @@ func extractGeminiResponseText(candidates []geminiCandidate) string {
 		return extractGeminiPartsText(candidates[0].Content.Parts)
 	}
 	return ""
+}
+
+// ExtractToolUsage extracts tool usage events from HTTP events.
+// Accepts *event.HttpRequestEvent (for function responses), *event.HttpResponseEvent (for function calls),
+// or *event.SSEEvent (for streaming function calls).
+func (p *GeminiParser) ExtractToolUsage(e event.Event) []*event.ToolUsageEvent {
+	switch ev := e.(type) {
+	case *event.HttpRequestEvent:
+		return p.extractFunctionResponses(ev.RequestPayload, ev.SSLContext)
+	case *event.HttpResponseEvent:
+		return p.extractFunctionCalls(ev.ResponsePayload, ev.SSLContext)
+	case *event.SSEEvent:
+		return p.extractToolUsageFromSSE(ev)
+	default:
+		return nil
+	}
+}
+
+// extractFunctionCalls extracts functionCall from response candidates
+func (p *GeminiParser) extractFunctionCalls(payload []byte, sessionID uint64) []*event.ToolUsageEvent {
+	var resp geminiResponse
+	if err := json.Unmarshal(payload, &resp); err != nil {
+		return nil
+	}
+
+	var events []*event.ToolUsageEvent
+	for _, candidate := range resp.Candidates {
+		if candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.FunctionCall == nil {
+				continue
+			}
+			events = append(events, &event.ToolUsageEvent{
+				SessionID: sessionID,
+				Timestamp: time.Now(),
+				UsageType: event.ToolUsageTypeInvocation,
+				ToolName:  part.FunctionCall.Name,
+				Input:     string(part.FunctionCall.Args),
+			})
+		}
+	}
+
+	return events
+}
+
+// extractFunctionResponses extracts functionResponse from request contents
+func (p *GeminiParser) extractFunctionResponses(payload []byte, sessionID uint64) []*event.ToolUsageEvent {
+	var req geminiRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil
+	}
+
+	var events []*event.ToolUsageEvent
+	for _, content := range req.Contents {
+		for _, part := range content.Parts {
+			if part.FunctionResponse == nil {
+				continue
+			}
+			events = append(events, &event.ToolUsageEvent{
+				SessionID: sessionID,
+				Timestamp: time.Now(),
+				UsageType: event.ToolUsageTypeResult,
+				ToolName:  part.FunctionResponse.Name,
+				Output:    string(part.FunctionResponse.Response),
+			})
+		}
+	}
+
+	return events
+}
+
+// extractToolUsageFromSSE extracts tool usage from streaming SSE events
+// For Gemini, function calls in streaming come as complete objects in each chunk,
+// so we extract them directly from the SSE data.
+func (p *GeminiParser) extractToolUsageFromSSE(sse *event.SSEEvent) []*event.ToolUsageEvent {
+	data := strings.TrimSpace(string(sse.Data))
+	if data == "" {
+		return nil
+	}
+
+	var streamResp geminiResponse
+	if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+		return nil
+	}
+
+	var events []*event.ToolUsageEvent
+	for _, candidate := range streamResp.Candidates {
+		if candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.FunctionCall == nil {
+				continue
+			}
+			events = append(events, &event.ToolUsageEvent{
+				SessionID: sse.SSLContext,
+				Timestamp: time.Now(),
+				UsageType: event.ToolUsageTypeInvocation,
+				ToolName:  part.FunctionCall.Name,
+				Input:     string(part.FunctionCall.Args),
+			})
+		}
+	}
+
+	return events
 }
