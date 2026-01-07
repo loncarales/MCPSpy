@@ -9,21 +9,38 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// ParserConfig controls which events the parser publishes
+type ParserConfig struct {
+	PublishLLMEvents  bool // Publish LLM request/response/stream events
+	PublishToolEvents bool // Publish tool usage events
+}
+
 // Parser handles parsing of LLM API messages
 type Parser struct {
 	eventBus  bus.EventBus
 	providers map[Provider]ProviderParser
+	config    ParserConfig
 }
 
-// NewParser creates a new LLM parser
+// NewParser creates a new LLM parser with default config (publish all events)
 func NewParser(eventBus bus.EventBus) (*Parser, error) {
+	return NewParserWithConfig(eventBus, ParserConfig{
+		PublishLLMEvents:  true,
+		PublishToolEvents: true,
+	})
+}
+
+// NewParserWithConfig creates a new LLM parser with custom config
+func NewParserWithConfig(eventBus bus.EventBus, config ParserConfig) (*Parser, error) {
 	p := &Parser{
 		eventBus:  eventBus,
 		providers: make(map[Provider]ProviderParser),
+		config:    config,
 	}
 
 	// Register providers
 	p.providers[ProviderAnthropic] = providers.NewAnthropicParser()
+	p.providers[ProviderGemini] = providers.NewGeminiParser()
 
 	if err := p.eventBus.Subscribe(event.EventTypeHttpRequest, p.handleRequest); err != nil {
 		return nil, err
@@ -63,7 +80,21 @@ func (p *Parser) handleRequest(e event.Event) {
 		return
 	}
 
-	p.eventBus.Publish(llmEvent)
+	if p.config.PublishLLMEvents {
+		p.eventBus.Publish(llmEvent)
+	}
+
+	// Extract and publish tool results from request
+	if p.config.PublishToolEvents {
+		toolEvents := parser.ExtractToolUsage(httpEvent)
+		for _, te := range toolEvents {
+			// Add process context from HTTP event
+			te.PID = httpEvent.PID
+			te.Comm = httpEvent.Comm()
+			te.Host = httpEvent.Host
+			p.eventBus.Publish(te)
+		}
+	}
 }
 
 func (p *Parser) handleResponse(e event.Event) {
@@ -95,7 +126,21 @@ func (p *Parser) handleResponse(e event.Event) {
 		return
 	}
 
-	p.eventBus.Publish(llmEvent)
+	if p.config.PublishLLMEvents {
+		p.eventBus.Publish(llmEvent)
+	}
+
+	// Extract and publish tool invocations from response
+	if p.config.PublishToolEvents {
+		toolEvents := parser.ExtractToolUsage(httpEvent)
+		for _, te := range toolEvents {
+			// Add process context from HTTP event
+			te.PID = httpEvent.PID
+			te.Comm = httpEvent.Comm()
+			te.Host = httpEvent.Host
+			p.eventBus.Publish(te)
+		}
+	}
 }
 
 func (p *Parser) handleSSE(e event.Event) {
@@ -120,8 +165,20 @@ func (p *Parser) handleSSE(e event.Event) {
 		return
 	}
 
-	if llmEvent != nil && llmEvent.Content != "" {
+	if p.config.PublishLLMEvents && llmEvent != nil && llmEvent.Content != "" {
 		p.eventBus.Publish(llmEvent)
+	}
+
+	// Extract and publish tool invocations from streaming SSE
+	if p.config.PublishToolEvents {
+		toolEvents := parser.ExtractToolUsage(sseEvent)
+		for _, te := range toolEvents {
+			// Add process context from SSE event
+			te.PID = sseEvent.PID
+			te.Comm = sseEvent.Comm()
+			te.Host = sseEvent.Host
+			p.eventBus.Publish(te)
+		}
 	}
 }
 
